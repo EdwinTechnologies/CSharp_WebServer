@@ -77,7 +77,7 @@ public class AsynchronousSocketListener
     public static string Connection = "Connection: close";
     public static string Content_Type = "Content-Type: text/html";
 
-    //public static string CONTENT = "";
+    public static string CONTENT = "";
 
 
     ////////////////////////////////////////////
@@ -178,6 +178,21 @@ public class AsynchronousSocketListener
                     else if (getBetween(RequestedPath, ".", " ") == "ttf")
                     {
                         Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: font/ttf" + "\n\n"));
+                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                    }
+                    else if (getBetween(RequestedPath, ".", " ") == "js")
+                    {
+                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/javascript" + "\n\n"));
+                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                    }
+                    else if (getBetween(RequestedPath, ".", " ") == "min.js")
+                    {
+                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/javascript" + "\n\n"));
+                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                    }
+                    else if (getBetween(RequestedPath, ".", " ") == "css")
+                    {
+                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/css" + "\n\n"));
                         Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
                     }
                     else
