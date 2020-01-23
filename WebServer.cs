@@ -20,43 +20,68 @@ public class StateObject
 
 public class AsynchronousSocketListener
 {
+
+
+    ////////////////////////////////////////////
+
+    public static int ListenPort = 80;
+    public static string IndexFile = "index.html";
+
+    public static string HTTP_Respose = "HTTP/1.1 200 OK";
+    public static string Date = "Date: Mon, 20 Jan 2020 15:00:00 GMT";
+    public static string Server = "Server: Simple Webserver .NET/C# [https://edwintech.ddns.net/]";
+    public static string Last_Modified = "Last-Modified: Mon, 20 Jan 2020 15:00:00 GMT";
+    public static string Accept_Ranges = "Accept-Ranges: bytes";
+    public static string Content_Length = "?";
+    public static string Connection = "Connection: close";
+
+    ////////////////////////////////////////////
+
     public static ManualResetEvent allDone = new ManualResetEvent(false);
 
 
     public AsynchronousSocketListener()
     {
+
     }
-
-
 
     public static void StartListening()
     {
         byte[] bytes = new Byte[1024];
 
         IPAddress ipAddress = IPAddress.Parse("0.0.0.0");
-        IPEndPoint localEndPoint = new IPEndPoint(ipAddress, 80);
+        IPEndPoint localEndPoint = new IPEndPoint(ipAddress, ListenPort);
 
         Socket listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         try
         {
+            
+            if (!File.Exists(IndexFile))
+            {
+                Log("WARNING: " + IndexFile + " not found!");
+            }
+
+            Log("Binding...");
+
             listener.Bind(localEndPoint);
-            listener.Listen(500);
+            listener.Listen(999);
+
+            Log("Listening on *:" + ListenPort);
 
             while (true)
             {
                 allDone.Reset();
 
-                //Console.WriteLine("Waiting for a connection...\n");
                 listener.BeginAccept(new AsyncCallback(AcceptCallback), listener);
 
                 allDone.WaitOne();
             }
 
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            //Nothing
+            //Console.WriteLine("Connection Error");
         }
 
         //Console.Read();
@@ -64,27 +89,14 @@ public class AsynchronousSocketListener
     }
 
 
+    public static void Log(string value)
+    {
+        Console.WriteLine("[" + DateTime.Now.ToString("h:mm:ss") + "] " + value);
+    }
 
-
-    ////////////////////////////////////////////
-
-    public static string HTTP_Respose = "HTTP/1.1 200 OK";
-    public static string Date = "Date: Wed, 10 Oct 2018 15:00:00 GMT";
-    public static string Server = "Server: Simple Webserver .NET/C# [EdwinTechnologies]";
-    public static string Last_Modified = "Last-Modified: Wed, 10 Oct 2018 15:00:00 GMT";
-    public static string Accept_Ranges = "Accept-Ranges: bytes";
-    public static string Content_Length = "?";
-    public static string Connection = "Connection: close";
-    public static string Content_Type = "Content-Type: text/html";
-
-    public static string CONTENT = "";
-
-
-    ////////////////////////////////////////////
 
     public static string getBetween(string strSource, string strStart, string strEnd)
     {
-
         try
         {
             int Start, End;
@@ -108,26 +120,24 @@ public class AsynchronousSocketListener
 
     public static void AcceptCallback(IAsyncResult ar)
     {
-        // Signal the main thread to continue.
         allDone.Set();
 
-        // Get the socket that handles the client request.
         Socket listener = (Socket)ar.AsyncState;
         Socket handler = listener.EndAccept(ar);
 
-        // Create the state object.
         StateObject state = new StateObject();
         state.workSocket = handler;
 
         state.buffer = new byte[1024];
 
         handler.BeginReceive(state.buffer, 0, StateObject.BufferSize, 0, new AsyncCallback(ReadCallback), state);       //Get Request Header
+    }
 
-
-
-
-
-        
+    public static string Reverse(string s)
+    {
+        char[] charArray = s.ToCharArray();
+        Array.Reverse(charArray);
+        return new string(charArray);
     }
 
     public static void ReadCallback(IAsyncResult ar)
@@ -147,81 +157,230 @@ public class AsynchronousSocketListener
 
                 content = state.sb.ToString();
 
-                string RequestedPath = getBetween(content, "GET ", "HTTP");
+                string RequestedPath = getBetween(content, "GET ", " HTTP");
 
-                //Console.WriteLine("\nRequest Header: \n" + content);
-                Console.WriteLine("Requested Path: " + "localhost" +  RequestedPath);
+                RequestedPath = RequestedPath.Replace("%20", " ");
+                RequestedPath = RequestedPath.Replace("%7B", "{");
+                RequestedPath = RequestedPath.Replace("%7D", "}");
 
+                string FileType = Reverse(getBetween(Reverse(RequestedPath + "*"), "*", "."));
+
+                byte[] FileContent;
+
+                //Log("\nRequest Header: \n" + content);
 
                 try
                 {
-                    if (RequestedPath == "/ ")
+                    if (RequestedPath == "/")
                     {
-                        string CONTENT = File.ReadAllText("index.html");
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + Date + "\n" + Server + "\n" + Last_Modified + "\n" + Accept_Ranges + "\n" + "Content-Length: " + CONTENT.Length.ToString() + "\n" + Connection + "\n" + Content_Type + "\n\n" + CONTENT));
+                        if (File.Exists(Directory.GetCurrentDirectory() + RequestedPath + "/" + IndexFile))
+                        {
+
+                            if (Reverse(RequestedPath)[0] != '/')
+                            {
+                                FileContent = Encoding.ASCII.GetBytes("<!DOCTYPE html><html><head><title>Redirecting...</title><meta http-equiv = \"refresh\" content = \"2; url = " + RequestedPath + "/" + "\" /></head><body><p>Redirecting...</p></body></html>"); ;
+                            }
+                            else
+                            {
+                                FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath + "/" + IndexFile);
+                            }
+                        }
+                        else
+                        {
+                            string DirContent = "";
+                            DirectoryInfo Dir = new DirectoryInfo(Directory.GetCurrentDirectory() + RequestedPath);
+
+                            DirContent = "<!DOCTYPE html>\n<html>\n<body>\n<table style=\"width: 100 % \">\n" + "<tr>\n" + "<th>NAME</th>\n<th>TYPE</th>\n</tr>\n";
+
+                            foreach (FileInfo file in Dir.GetFiles())
+                            {
+                                DirContent += "<tr>\n";
+                                DirContent += "<td>" + " <a href=\"" + RequestedPath + file.Name + "\">" + file.Name + "</a> " + "</td>\n";
+                                DirContent += "<td>&lt;FILE&gt;</td>\n";
+                                DirContent += "</tr>\n";
+                            }
+
+                            foreach (DirectoryInfo dir in Dir.GetDirectories())
+                            {
+                                DirContent += "<tr>\n";
+                                DirContent += "<td>" + " <a href=\"" + RequestedPath + dir.Name + "\">" + dir.Name + "</a> " + "</td>\n";
+                                DirContent += "<td>&lt;DIR&gt;</td>\n";
+                                DirContent += "</tr>\n";
+                            }
+
+                            DirContent += "</table>\n</body>\n</html>";
+
+                            FileContent = Encoding.UTF8.GetBytes(DirContent);
+                        }
+
+
+
+                        SendHeader(handler, FileContent, "text/html");
+                        Send(handler, FileContent);
+                        //FileContent = File.ReadAllBytes("index.html");
+
+                        //SendHeader(handler, FileContent, "text/html");
+                        //Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "png")
+                    else if (FileType == "")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: image/png" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        if (File.Exists(Directory.GetCurrentDirectory() + RequestedPath + "/" + IndexFile))
+                        {
+
+                            if (Reverse(RequestedPath)[0] != '/')
+                            {
+                                FileContent = Encoding.ASCII.GetBytes("<!DOCTYPE html><html><head><title>Redirecting...</title><meta http-equiv = \"refresh\" content = \"2; url = " + RequestedPath + "/" + "\" /></head><body><p>Redirecting...</p></body></html>"); ;
+                            }
+                            else
+                            {
+                                FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath + "/" + IndexFile);
+                            }
+                        }
+                        else
+                        {
+                            string DirContent = "";
+                            DirectoryInfo Dir = new DirectoryInfo(Directory.GetCurrentDirectory() + RequestedPath);
+
+                            DirContent = "<!DOCTYPE html>\n<html>\n<body>\n<table style=\"width: 100 % \">\n" + "<tr>\n" + "<th>NAME</th>\n<th>TYPE</th>\n</tr>\n";
+
+                            foreach (FileInfo file in Dir.GetFiles())
+                            {
+                                DirContent += "<tr>\n";
+                                DirContent += "<td>" + " <a href=\"" + RequestedPath + "/" + file.Name + "\">" + file.Name + "</a> " + "</td>\n";
+                                DirContent += "<td>&lt;FILE&gt;</td>\n";
+                                DirContent += "</tr>\n";
+                            }
+
+                            foreach (DirectoryInfo dir in Dir.GetDirectories())
+                            {
+                                DirContent += "<tr>\n";
+                                DirContent += "<td>" + " <a href=\"" + RequestedPath + "/" + dir.Name + "\">" + dir.Name + "</a> " + "</td>\n";
+                                DirContent += "<td>&lt;DIR&gt;</td>\n";
+                                DirContent += "</tr>\n";
+                            }
+
+                            DirContent += "</table>\n</body>\n</html>";
+
+                            FileContent = Encoding.UTF8.GetBytes(DirContent);
+                        }
+
+                        
+
+                        SendHeader(handler, FileContent, "text/html");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "jpg")
+                    else if (FileType == "html")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: image/jpg" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "text/html");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "jpeg")
+                    else if (FileType == "htm")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: image/jpeg" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "text/html");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "ttf")
+                    else if (FileType == "txt")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: font/ttf" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "text/plain");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "js")
+                    else if (FileType == "png")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/javascript" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "image/png");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "min.js")
+                    else if (FileType == "jpg")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/javascript" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "image/jpg");
+                        Send(handler, FileContent);
                     }
-                    else if (getBetween(RequestedPath, ".", " ") == "css")
+                    else if (FileType == "jpeg")
                     {
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + "Content-Length: " + File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath).Length.ToString() + "\n" + "Content-Type: text/css" + "\n\n"));
-                        Send(handler, File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "image/jpeg");
+                        Send(handler, FileContent);
+                    }
+                    else if (FileType == "ttf")
+                    {
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "font/ttf");
+                        Send(handler, FileContent);
+                    }
+                    else if (FileType == "js")
+                    {
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "text/javascript");
+                        Send(handler, FileContent);
+                    }
+                    else if (FileType == "css")
+                    {
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "text/css");
+                        Send(handler, FileContent);
                     }
                     else
                     {
-                        string CONTENT = File.ReadAllText(Directory.GetCurrentDirectory() + RequestedPath);
-                        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + Date + "\n" + Server + "\n" + Last_Modified + "\n" + Accept_Ranges + "\n" + "Content-Length: " + CONTENT.Length.ToString() + "\n" + Connection + "\n" + Content_Type + "\n\n" + CONTENT));
+                        FileContent = File.ReadAllBytes(Directory.GetCurrentDirectory() + RequestedPath);
+
+                        SendHeader(handler, FileContent, "unknown-type");
+                        Send(handler, FileContent);
                     }
 
+                    Log("Requested Path: " + RequestedPath + " | " + "FileType: '" + FileType + "'");
+
+                    handler.Shutdown(SocketShutdown.Both);
+                    handler.Close();
 
                 }
                 catch (Exception)
                 {
-                    string CONTENT = "ERROR 404";
-                    Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + Date + "\n" + Server + "\n" + Last_Modified + "\n" + Accept_Ranges + "\n" + "Content-Length: " + CONTENT.Length.ToString() + "\n" + Connection + "\n" + Content_Type + "\n\n" + CONTENT));
+                    if (File.Exists("404.html"))
+                    {
+                        FileContent = File.ReadAllBytes("404.html");
+                    }
+                    else
+                    {
+                        FileContent = Encoding.ASCII.GetBytes("ERROR 404");
+                    }
+
+                    Send(handler, Encoding.ASCII.GetBytes("HTTP/1.1 404 Not Found" + "\n" + Date + "\n" + Server + "\n" + Last_Modified + "\n" + Accept_Ranges + "\n" + "Content-Length: " + FileContent.Length.ToString() + "\n" + Connection + "\n" + "Content-Type: " + "text/html" + "\n\n"));
+
+                    Send(handler, FileContent);
+
+                    Log("ERROR 404: Requested Path: " + RequestedPath + " | " + "FileType: '" + FileType + "'");
+
+                    handler.Shutdown(SocketShutdown.Both);
+                    handler.Close();
                 }
-
-                
-
-                handler.Shutdown(SocketShutdown.Both);
-                handler.Close();
 
             }
         }
         catch (Exception e)
         {
-
+            Log(e.ToString());
         }
-
     }
+
+
+    private static void SendHeader(Socket handler, byte[] FileContent, string ContentType)
+    {
+        Send(handler, Encoding.ASCII.GetBytes(HTTP_Respose + "\n" + Date + "\n" + Server + "\n" + Last_Modified + "\n" + Accept_Ranges + "\n" + "Content-Length: " + FileContent.Length.ToString() + "\n" + Connection + "\n" + "Content-Type: "+ ContentType + "\n\n"));
+    }
+
 
     private static void Send(Socket handler, byte[] data)
     {
@@ -242,11 +401,10 @@ public class AsynchronousSocketListener
             Socket handler = (Socket)ar.AsyncState;
 
             int bytesSent = handler.EndSend(ar);
-            //Console.WriteLine("Sent {0} bytes to client.", bytesSent);
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            //Nothing
+            //Console.WriteLine(e);
         }
     }
 
